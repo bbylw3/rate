@@ -3,12 +3,9 @@
 
 <head>
   <meta charset="utf-8" />
-  <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="theme-color" content="#6366f1" />
   <meta name="description" content="智能汇率兑换工具 - 实时汇率查询，历史走势分析，支持多种货币兑换" />
-  <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-  <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,15 +33,25 @@
         <p class="subtitle">实时汇率查询 · 历史走势分析 · 多币种支持</p>
       </header>
 
+
       <main class="exchange-container">
-        <div class="glass-card">
+        <!-- Main Exchange Card -->
+        <div class="glass-card animation-container">
+          <div class="input-group">
+            <label for="amount">
+              <i class="fas fa-coins"></i> 金额
+            </label>
+            <input type="number" id="amount" class="input-field amount-input" value="1" min="0" step="0.01"
+              placeholder="输入金额" />
+          </div>
+
           <div class="currency-input-section">
             <div class="input-group">
-              <label for="amount">
-                <i class="fas fa-coins"></i> 金额
+              <label for="fromCurrency">
+                <i class="fas fa-money-bill-wave"></i> 原始货币
               </label>
-              <input type="number" id="amount" class="input-field amount-input" value="1" min="0" step="0.01"
-                placeholder="输入金额" />
+              <select id="fromCurrency" class="currency-select">
+              </select>
             </div>
 
             <button class="swap-button" id="swap-button" title="交换货币">
@@ -60,40 +67,29 @@
             </div>
           </div>
 
-          <div class="currency-input-section" style="grid-template-columns: 1fr; gap: var(--space-md);">
-            <div class="input-group">
-              <label for="fromCurrency">
-                <i class="fas fa-money-bill-wave"></i> 原始货币
-              </label>
-              <select id="fromCurrency" class="currency-select">
-              </select>
-            </div>
-          </div>
-
-          <div id="status-messages">
+          <div id="status-messages" class="animation-container">
             <!-- Loading, error, and result messages will be inserted here by JavaScript -->
           </div>
         </div>
 
-        <div class="glass-card" style="text-align: center;">
-          <button class="action-button" id="toggle-chart-button" style="width: 100%;">
+        <!-- Chart Card -->
+        <div class="glass-card animation-container">
+          <button class="action-button" id="toggle-chart-button">
             <i class="fas fa-chart-line"></i>
             显示历史走势
           </button>
 
-          <div id="chart-container" class="chart-container"
-            style="height: 400px; margin-top: var(--space-lg); display: none;">
+          <div id="chart-container" class="chart-container" style="display: none;">
             <canvas id="historicalChart"></canvas>
           </div>
         </div>
 
-        <!-- Additional Features Card -->
-        <div class="glass-card">
-          <h3 style="color: var(--text-white); margin-bottom: var(--space-lg); text-align: center;">
+        <!-- Quick Actions Card -->
+        <div class="glass-card animation-container quick-actions">
+          <h3>
             <i class="fas fa-star"></i> 快速操作
           </h3>
-          <div
-            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
+          <div>
             <button class="action-button" id="usd-cny-button">
               <i class="fas fa-dollar-sign"></i> 美元→人民币
             </button>
@@ -109,434 +105,7 @@
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    const currencyNames = {
-      USD: '美元 (USD)',
-      EUR: '欧元 (EUR)',
-      GBP: '英镑 (GBP)',
-      JPY: '日元 (JPY)',
-      CNY: '人民币 (CNY)',
-      CAD: '加元 (CAD)',
-      AUD: '澳元 (AUD)',
-      CHF: '瑞士法郎 (CHF)',
-      HKD: '港币 (HKD)',
-      SGD: '新加坡元 (SGD)',
-      KRW: '韩元 (KRW)',
-      INR: '印度卢比 (INR)',
-    };
-
-    const currencyFlags = {
-      USD: '🇺🇸',
-      EUR: '🇪🇺',
-      GBP: '🇬🇧',
-      JPY: '🇯🇵',
-      CNY: '🇨🇳',
-      CAD: '🇨🇦',
-      AUD: '🇦🇺',
-      CHF: '🇨🇭',
-      HKD: '🇭🇰',
-      SGD: '🇸🇬',
-      KRW: '🇰🇷',
-      INR: '🇮🇳',
-    };
-
-    const currencies = Object.keys(currencyNames);
-
-    // DOM Elements
-    const amountInput = document.getElementById('amount');
-    const fromCurrencySelect = document.getElementById('fromCurrency');
-    const toCurrencySelect = document.getElementById('toCurrency');
-    const swapButton = document.getElementById('swap-button');
-    const statusMessagesDiv = document.getElementById('status-messages');
-    const toggleChartButton = document.getElementById('toggle-chart-button');
-    const chartContainer = document.getElementById('chart-container');
-    const historicalChartCanvas = document.getElementById('historicalChart');
-    const usdCnyButton = document.getElementById('usd-cny-button');
-    const eurCnyButton = document.getElementById('eur-cny-button');
-    const gbpCnyButton = document.getElementById('gbp-cny-button');
-
-    let currentChart = null; // To store the Chart.js instance
-
-    // Initial state
-    let amount = 1;
-    let fromCurrency = 'USD';
-    let toCurrency = 'EUR';
-    let exchangeRate = null;
-    let convertedAmount = null;
-    let error = null;
-    let loading = false;
-    let historicalData = null;
-    let showChart = false;
-
-    // Populate currency select options
-    function populateCurrencySelects() {
-      currencies.forEach(currency => {
-        const optionFrom = document.createElement('option');
-        optionFrom.value = currency;
-        optionFrom.textContent = `${currencyFlags[currency]} ${currencyNames[currency]}`;
-        fromCurrencySelect.appendChild(optionFrom);
-
-        const optionTo = document.createElement('option');
-        optionTo.value = currency;
-        optionTo.textContent = `${currencyFlags[currency]} ${currencyNames[currency]}`;
-        toCurrencySelect.appendChild(optionTo);
-      });
-
-      // Set initial values
-      fromCurrencySelect.value = fromCurrency;
-      toCurrencySelect.value = toCurrency;
-    }
-
-    // Update UI based on state
-    function updateUI() {
-      statusMessagesDiv.innerHTML = ''; // Clear previous messages
-
-      if (loading) {
-        statusMessagesDiv.innerHTML = `
-            <div class="loading-message">
-              <div class="loading-spinner"></div>
-              正在获取最新汇率...
-            </div>
-          `;
-      } else if (error) {
-        statusMessagesDiv.innerHTML = `
-            <div class="error-message">
-              <i class="fas fa-exclamation-triangle"></i>
-              ${error}
-            </div>
-          `;
-      } else if (exchangeRate && convertedAmount !== null) {
-        statusMessagesDiv.innerHTML = `
-            <div class="result">
-              <h2>
-                <i class="fas fa-calculator"></i> 兑换结果
-              </h2>
-              <div class="result-amount">
-                ${currencyFlags[fromCurrency]} ${amount} → ${currencyFlags[toCurrency]} ${convertedAmount}
-              </div>
-              <div class="exchange-rate">
-                当前汇率: 1 ${fromCurrency} = ${exchangeRate} ${toCurrency}
-              </div>
-              <div class="exchange-rate" style="font-size: 0.875rem; margin-top: 8px;">
-                <i class="fas fa-clock"></i> 数据更新时间: ${new Date().toLocaleString('zh-CN')}
-              </div>
-            </div>
-          `;
-      }
-
-      // Chart visibility
-      if (showChart) {
-        chartContainer.style.display = 'block';
-        toggleChartButton.innerHTML = `<i class="fas fa-chart-line"></i> 隐藏走势图`;
-        if (historicalData) {
-          renderChart();
-        } else if (!loading && !error) {
-          statusMessagesDiv.innerHTML += `
-              <div class="loading-message">
-                <div class="loading-spinner"></div>
-                正在加载走势图数据...
-              </div>
-            `;
-        }
-      } else {
-        chartContainer.style.display = 'none';
-        toggleChartButton.innerHTML = `<i class="fas fa-chart-area"></i> 显示历史走势`;
-      }
-    }
-
-    // Fetch current exchange rate
-    async function fetchExchangeRate() {
-      error = null;
-      exchangeRate = null;
-      convertedAmount = null;
-      loading = true;
-      updateUI();
-
-      try {
-        const response = await fetch(`https://api.frankfurter.app/latest?from=${fromCurrency}&to=${toCurrency}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch exchange rate');
-        }
-        const data = await response.json();
-        if (data.rates && data.rates[toCurrency]) {
-          const rate = data.rates[toCurrency];
-          exchangeRate = rate;
-          convertedAmount = (amount * rate).toFixed(2);
-        } else {
-          error = `无法获取 ${fromCurrency} 到 ${toCurrency} 的汇率。`;
-        }
-      } catch (err) {
-        error = '获取汇率时出错，请重试。';
-        console.error(err);
-      } finally {
-        loading = false;
-        updateUI();
-      }
-    }
-
-    // Fetch historical exchange rate data for chart
-    async function fetchHistoricalData() {
-      const today = new Date();
-      const thirtyDaysAgo = new Date(today);
-      thirtyDaysAgo.setDate(today.getDate() - 30);
-
-      const formatDate = (date) => date.toISOString().split('T')[0];
-
-      const startDate = formatDate(thirtyDaysAgo);
-      const endDate = formatDate(today);
-
-      try {
-        const response = await fetch(`https://api.frankfurter.app/${startDate}..${endDate}?from=${fromCurrency}&to=${toCurrency}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch historical data');
-        }
-        const data = await response.json();
-        if (data.rates) {
-          const labels = Object.keys(data.rates).sort();
-          const rates = labels.map(date => data.rates[date][toCurrency]);
-          historicalData = { labels, rates };
-        }
-      } catch (err) {
-        console.error('Error fetching historical data:', err);
-        historicalData = null; // Clear historical data on error
-      } finally {
-        updateUI();
-      }
-    }
-
-    // Render Chart.js chart
-    function renderChart() {
-      if (currentChart) {
-        currentChart.destroy(); // Destroy existing chart instance
-      }
-
-      const ctx = historicalChartCanvas.getContext('2d');
-      currentChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: historicalData?.labels || [],
-          datasets: [
-            {
-              label: `${fromCurrency} → ${toCurrency}`,
-              data: historicalData?.rates || [],
-              fill: true,
-              backgroundColor: 'rgba(44, 83, 100, 0.1)', /* Darker chart fill */
-              borderColor: '#2c5364', /* Darker chart line */
-              borderWidth: 3,
-              pointBackgroundColor: '#2c5364',
-              pointBorderColor: '#e0e0e0',
-              pointBorderWidth: 2,
-              pointRadius: 4,
-              pointHoverRadius: 6,
-              tension: 0.4,
-              shadowOffsetX: 0,
-              shadowOffsetY: 4,
-              shadowBlur: 10,
-              shadowColor: 'rgba(0, 0, 0, 0.3)', /* Darker shadow */
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              display: true,
-              position: 'top',
-              labels: {
-                color: '#e0e0e0', /* Lighter legend text */
-                font: {
-                  family: 'Inter',
-                  size: 14,
-                  weight: '500',
-                },
-                usePointStyle: true,
-                pointStyle: 'circle',
-              },
-            },
-            title: {
-              display: true,
-              text: `${currencyFlags[fromCurrency]} ${fromCurrency} → ${currencyFlags[toCurrency]} ${toCurrency} 汇率走势 (过去30天)`,
-              color: '#e0e0e0', /* Lighter title text */
-              font: {
-                family: 'Inter',
-                size: 16,
-                weight: '600',
-              },
-              padding: {
-                top: 10,
-                bottom: 30,
-              },
-            },
-            tooltip: {
-              backgroundColor: 'rgba(0, 0, 0, 0.9)', /* Darker tooltip background */
-              titleColor: '#ffffff',
-              bodyColor: '#ffffff',
-              borderColor: '#2c5364', /* Darker tooltip border */
-              borderWidth: 1,
-              cornerRadius: 8,
-              displayColors: false,
-              callbacks: {
-                title: function (context) {
-                  return `日期: ${context[0].label}`;
-                },
-                label: function (context) {
-                  return `汇率: ${context.parsed.y.toFixed(4)}`;
-                },
-              },
-            },
-          },
-          scales: {
-            x: {
-              display: true,
-              title: {
-                display: true,
-                text: '日期',
-                color: '#e0e0e0', /* Lighter axis title */
-                font: {
-                  family: 'Inter',
-                  size: 12,
-                  weight: '500',
-                },
-              },
-              ticks: {
-                color: 'rgba(255, 255, 255, 0.6)', /* Darker ticks */
-                font: {
-                  family: 'Inter',
-                  size: 11,
-                },
-                maxTicksLimit: 8,
-              },
-              grid: {
-                color: 'rgba(255, 255, 255, 0.05)', /* Darker grid lines */
-                drawBorder: false,
-              },
-            },
-            y: {
-              display: true,
-              title: {
-                display: true,
-                text: '汇率',
-                color: '#e0e0e0', /* Lighter axis title */
-                font: {
-                  family: 'Inter',
-                  size: 12,
-                  weight: '500',
-                },
-              },
-              ticks: {
-                color: 'rgba(255, 255, 255, 0.6)', /* Darker ticks */
-                font: {
-                  family: 'Inter',
-                  size: 11,
-                },
-                callback: function (value) {
-                  return value.toFixed(4);
-                },
-              },
-              grid: {
-                color: 'rgba(255, 255, 255, 0.05)', /* Darker grid lines */
-                drawBorder: false,
-              },
-            },
-          },
-          interaction: {
-            intersect: false,
-            mode: 'index',
-          },
-          elements: {
-            point: {
-              hoverBackgroundColor: '#ffffff',
-              hoverBorderColor: '#2c5364', /* Darker hover border */
-              hoverBorderWidth: 3,
-            },
-          },
-        },
-      });
-    }
-
-    // Event Listeners
-    amountInput.addEventListener('input', (e) => {
-      amount = parseFloat(e.target.value) || 0;
-      if (amount > 0) {
-        fetchExchangeRate();
-      } else {
-        convertedAmount = null;
-        exchangeRate = null;
-        updateUI();
-      }
-    });
-
-    fromCurrencySelect.addEventListener('change', (e) => {
-      fromCurrency = e.target.value;
-      fetchExchangeRate();
-      fetchHistoricalData();
-    });
-
-    toCurrencySelect.addEventListener('change', (e) => {
-      toCurrency = e.target.value;
-      fetchExchangeRate();
-      fetchHistoricalData();
-    });
-
-    swapButton.addEventListener('click', () => {
-      const tempFrom = fromCurrency;
-      fromCurrency = toCurrency;
-      toCurrency = tempFrom;
-      fromCurrencySelect.value = fromCurrency;
-      toCurrencySelect.value = toCurrency;
-      fetchExchangeRate();
-      fetchHistoricalData();
-    });
-
-    toggleChartButton.addEventListener('click', () => {
-      showChart = !showChart;
-      updateUI();
-      if (showChart && !historicalData) {
-        fetchHistoricalData();
-      }
-    });
-
-    usdCnyButton.addEventListener('click', () => {
-      amount = 1;
-      fromCurrency = 'USD';
-      toCurrency = 'CNY';
-      amountInput.value = amount;
-      fromCurrencySelect.value = fromCurrency;
-      toCurrencySelect.value = toCurrency;
-      fetchExchangeRate();
-      fetchHistoricalData();
-    });
-
-    eurCnyButton.addEventListener('click', () => {
-      amount = 1;
-      fromCurrency = 'EUR';
-      toCurrency = 'CNY';
-      amountInput.value = amount;
-      fromCurrencySelect.value = fromCurrency;
-      toCurrencySelect.value = toCurrency;
-      fetchExchangeRate();
-      fetchHistoricalData();
-    });
-
-    gbpCnyButton.addEventListener('click', () => {
-      amount = 1;
-      fromCurrency = 'GBP';
-      toCurrency = 'CNY';
-      amountInput.value = amount;
-      fromCurrencySelect.value = fromCurrency;
-      toCurrencySelect.value = toCurrency;
-      fetchExchangeRate();
-      fetchHistoricalData();
-    });
-
-    // Initial setup on page load
-    document.addEventListener('DOMContentLoaded', () => {
-      populateCurrencySelects();
-      fetchExchangeRate();
-      fetchHistoricalData();
-    });
-  </script>
+  <script src="script.js" defer></script>
 </body>
 
 </html>
